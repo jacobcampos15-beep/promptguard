@@ -1,0 +1,1 @@
+Across 160 injection trials on 10 tasks and 4 attack styles, the best defense ('delimiting') cut mean injection success from 0% (no defense) to 0%, while retaining 100% task completion.

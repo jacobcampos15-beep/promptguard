@@ -48,16 +48,25 @@ def load_cases(limit=None):
 
 # --- model backends ----------------------------------------------------------
 def real_model(system, user, model, max_tokens=250):
-    import anthropic
-    client = anthropic.Anthropic()
+    import os, requests
+    key = os.getenv("ANTHROPIC_API_KEY")
+    if not key:
+        raise SystemExit("Set ANTHROPIC_API_KEY (or a .env file), or run with --mock.")
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {"x-api-key": key, "anthropic-version": "2023-06-01",
+               "content-type": "application/json"}
+    body = {"model": model, "max_tokens": max_tokens, "temperature": 0,
+            "system": system, "messages": [{"role": "user", "content": user}]}
     last = None
-    for attempt in range(4):  # simple backoff for transient errors / rate limits
+    for attempt in range(4):
         try:
-            resp = client.messages.create(
-                model=model, max_tokens=max_tokens, temperature=0,
-                system=system, messages=[{"role": "user", "content": user}],
-            )
-            return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+            r = requests.post(url, headers=headers, json=body, timeout=60)
+            if r.status_code == 200:
+                data = r.json()
+                return "".join(b.get("text", "") for b in data.get("content", [])
+                               if b.get("type") == "text")
+            # surface real errors loudly instead of silently scoring 0
+            raise RuntimeError(f"API {r.status_code}: {r.text[:300]}")
         except Exception as e:
             last = e
             time.sleep(2 ** attempt)
